@@ -1,64 +1,124 @@
-import clientPromise from "@/lib/mongodb";
-import { MongoDBAdapter } from "@auth/mongodb-adapter";
 import { NextAuthOptions } from "next-auth";
 import NextAuth from "next-auth/next";
-import EmailProvider from 'next-auth/providers/email';
-import { createTransport } from 'nodemailer';
-
-const adapter = MongoDBAdapter(clientPromise)
+import CredentialsProvider from "next-auth/providers/credentials"
+import VerificationToken from "@/models/verification-token";
+import { hashCode } from "@/lib/utils";
+import User from "@/models/User";
+import connectToDatabase from "@/lib/connect-db";
 
 export const authOptions: NextAuthOptions = {
-    providers: [
-        EmailProvider({
-            maxAge: 5 * 60,
-            async generateVerificationToken() {
-                return "rajat"
-            },
-            async sendVerificationRequest({ 
-                identifier,
-                url,
-                token,
-                provider
-            }) {
-                //console.log(identifier, url, token, provider)
-                const theme = {}
-                const { host } = new URL(url)
-                const transport = createTransport(provider.server)
-                const result = await transport.sendMail({
-                    to: identifier,
-                    from: provider.from,
-                    subject: `Sign in to ${host}`,
-                    text: text({ token, host }),
-                    html: html({ token, host, theme }),
-                })
-                const failed = result.rejected.concat(result.pending).filter(Boolean)
-                if (failed.length) {
-                    throw new Error(`Email (${failed.join(", ")}) could not be sent`)
+        providers: [
+            CredentialsProvider({
+                name: "Email",
+                credentials: {},
+                async authorize(credentials, req) {
+                    const { email, code } = credentials
+                    const domain = req.headers?.host?.split(".")[0] || "main";
+
+                    await connectToDatabase()
+
+                    const verificationToken = await VerificationToken.findOneAndDelete({
+                        email,
+                        domain,
+                        code: hashCode(code),
+                        timestamp: { $gt: Date.now() }
+                    })
+                    console.log("verificationToken", verificationToken)
+                    if (!verificationToken) {
+                        return null
+                    }
+
+                    let user = await User.findOne({
+                        domain,
+                        email
+                    })
+
+                    if (!user) {
+                        user = await User.create({
+                            domain,
+                            email
+                        })
+                    }
+                    console.log(user)
+
+                    return {
+                        id: user.userId,
+                        email,
+                        name: user.name
+                    }
                 }
-            },
-            server: {
-                host: process.env.EMAIL_SERVER_HOST,
-                auth: {
-                    user: process.env.EMAIL_SERVER_USER,
-                    pass: process.env.EMAIL_SERVER_PASSWORD
-                }
-            },
-            from: process.env.EMAIL_FROM
-        })
-    ],
-    adapter: adapter,
-    pages: {
-        signIn: '/api/auth/sign-in'
-    },
-    callbacks: {
-        async signIn({ user, account, profile, email, credentials }) {
-            console.log('signIn', user, account, profile, email, credentials)
-            return true
+            })
+        ],
+        pages: {
+            signIn: '/api/auth/sign-in'
+        },
+        callbacks: {
+            async redirect({ url, baseUrl }) {
+                return url;
+            }
         }
-    }
 }
 
-const handler = NextAuth(authOptions)
+const generateAuthOptions = (domain: string, host?: string): NextAuthOptions  => ({
+        providers: [
+            CredentialsProvider({
+                name: "Email",
+                credentials: {},
+                async authorize(credentials, req) {
+                    console.log("credentials", credentials)
+                    const { email, code, callbackUrl } = credentials
+                    console.log(callbackUrl)
+                    const domain = req.headers?.host?.split(".")[0] || "main";
+                    console.log(email, code, domain)
+                    await connectToDatabase()
+                    const verificationToken = await VerificationToken.findOneAndDelete({
+                        email,
+                        domain,
+                        code: hashCode(code),
+                        timestamp: { $gt: Date.now() }
+                    })
+                    console.log("verificationToken", verificationToken)
+                    if (!verificationToken) {
+                        console.log("returning...")
+                        return null
+                    }
+
+                    let user = await User.findOne({
+                        domain,
+                        email
+                    })
+
+                    if (!user) {
+                        user = await User.create({
+                            domain,
+                            email
+                        })
+                    }
+                    console.log(user)
+
+                    return {
+                        id: user.userId,
+                        email,
+                        name: user.name
+                    }
+                }
+            })
+        ],
+        pages: {
+            signIn: '/api/auth/sign-in'
+        },
+        callbacks: {
+            async redirect({ url, baseUrl }) {
+                return url;
+            }
+        }
+})
+
+//const handler = NextAuth(authOptions)
+async function auth(req: Request, res: Response) {
+    return await NextAuth(req, res, authOptions)
+}
+export { auth as GET, auth as POST }
 
 function html(params: { token: string; host: string; theme: Theme }) {
   const { token, host, theme } = params
@@ -117,4 +177,3 @@ function text({ url, host }: { url: string; host: string }) {
   return `Sign in to ${host}\n${url}\n\n`
 }
 
-export { handler as GET, handler as POST }

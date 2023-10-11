@@ -2,8 +2,8 @@
 
 import { signIn } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
-import { useRouter } from 'next/router'
 import { FormEvent, useState } from 'react'
+import styles from './SignIn.module.css'
 
 const signinErrors: Record<
   Lowercase<any>,
@@ -43,32 +43,45 @@ export default function SignIn(props) {
         (signinErrors[errorType.toLowerCase() as Lowercase<any>] ??
           signinErrors.default)
 
-    const checkToken = function (e: FormEvent) {
+    const checkToken = async function (e: FormEvent) {
         e.preventDefault()
-        const url = `/api/auth/callback/email?email=${encodeURIComponent(email)}&token=${code}${callbackUrlValue ? `&callbackUrl=${encodeURIComponent(callbackUrlValue)}` : ''}` 
-        console.log(url)
-        window.location.href = url 
+        const url = `/api/auth/code/generate?email=${encodeURIComponent(email)}${callbackUrlValue ? `&callbackUrl=${encodeURIComponent(callbackUrlValue)}` : ''}` 
+        const response = await fetch(url)
+        if (response.ok) {
+            setShowCode(true)
+        } else {
+            console.log(await response.json())
+        }
+    }
+
+    const signInUser = async function (e: FormEvent) {
+        e.preventDefault()
+        signIn('credentials', {
+            email,
+            code
+        })
     }
 
     return (
-        <div>
+        <div className={styles.content}>
             {error && (
               <div className="error">
                 <p>{error}</p>
               </div>
             )}
             {!showCode &&
-            <form onSubmit={(e) => e.preventDefault()}>
-            <input type='email' value={email} onChange={(e) => setEmail(e.target.value)} />
-            <button onClick={async () => {
-                const res = await signIn('email', {redirect: false, email })
-                setShowCode(true)
-            }}>Sign in</button>
-            </form>
+                <form onSubmit={checkToken}>
+                    <input 
+                        type='email' 
+                        value={email} 
+                        placeholder='Enter your email'
+                        onChange={(e) => setEmail(e.target.value)} />
+                    <input type="submit" value="Get code" />
+                </form>
             }
             {showCode &&
-                <form onSubmit={checkToken}>
-                    Enter code sent to {email}
+                <form onSubmit={signInUser}>
+                    Enter the code sent to {email}
                     <input type='text' value={code} onChange={(e) => setCode(e.target.value)} />
                     <input type="submit" value="Login" />
                 </form>}

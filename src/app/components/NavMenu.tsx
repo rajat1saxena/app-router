@@ -1,27 +1,24 @@
 "use client"
 
 import { signIn, signOut, useSession } from 'next-auth/react'
-import { useState } from 'react'
+import styles from './NavMenu.module.css'
 
 function AuthButton() {
-    const [email, setEmail] = useState("")
-    const [code, setCode] = useState("")
     const {data: session} = useSession()
-    const [showCode, setShowCode] = useState(false)
 
     if (session) {
         return (
-            <>
-                {session?.user?.name} <br />
+            <div className={styles.navbar}>
+                {session?.user?.email} <br />
                 <button onClick={() => signOut()}>Sign out</button>
-            </>
+            </div>
         )
     }
     return (
-        <>
+        <div className={styles.navbar}>
             Guest <br />
             <button onClick={() => signIn()}>Sign in</button>
-        </>
+        </div>
     )
 }
 
