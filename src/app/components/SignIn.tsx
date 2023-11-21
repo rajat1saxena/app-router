@@ -1,74 +1,49 @@
 "use client"
 
-import { signIn } from 'next-auth/react'
-import { useSearchParams } from 'next/navigation'
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import styles from './SignIn.module.css'
+import { supabase } from '@/lib/supabase'
 
-const signinErrors: Record<
-  Lowercase<any>,
-  string
-> = {
-  default: "Unable to sign in.",
-  signin: "Try signing in with a different account.",
-  oauthsignin: "Try signing in with a different account.",
-  oauthcallbackerror: "Try signing in with a different account.",
-  oauthcreateaccount: "Try signing in with a different account.",
-  emailcreateaccount: "Try signing in with a different account.",
-  callback: "Try signing in with a different account.",
-  oauthaccountnotlinked:
-    "To confirm your identity, sign in with the same account you used originally.",
-  emailsignin: "The e-mail could not be sent.",
-  credentialssignin:
-    "Sign in failed. Check the details you provided are correct.",
-  sessionrequired: "Please sign in to access this page.",
-}
-
-export default function SignIn(props) {
-    const {
-        csrfToken,
-        providers = {},
-        callbackUrl,
-        email: userEmail,
-        error: errorType
-    } = props
+export default function SignIn() {
     const [showCode, setShowCode] = useState(false)
     const [email, setEmail] = useState("")
     const [code, setCode] = useState("")
-    const searchParams = useSearchParams()
-    const callbackUrlValue = searchParams.get('callbackUrl')
 
-    const error =
-        errorType &&
-        (signinErrors[errorType.toLowerCase() as Lowercase<any>] ??
-          signinErrors.default)
+    useEffect(() => {
+        checkSession()
+    }, [])
+
+    const checkSession = async function () {
+        const { data, error } = await supabase.auth.getSession()
+        console.log(data, error);
+    }
 
     const checkToken = async function (e: FormEvent) {
         e.preventDefault()
-        const url = `/api/auth/code/generate?email=${encodeURIComponent(email)}${callbackUrlValue ? `&callbackUrl=${encodeURIComponent(callbackUrlValue)}` : ''}` 
-        const response = await fetch(url)
-        if (response.ok) {
+        const { data, error } = await supabase.auth.signInWithOtp({
+            email,
+            options: {},
+        })
+        if (data.hasOwnProperty('user')) {
             setShowCode(true)
-        } else {
-            console.log(await response.json())
         }
     }
 
     const signInUser = async function (e: FormEvent) {
         e.preventDefault()
-        signIn('credentials', {
-            email,
-            code
+        const response = await fetch('auth/confirm', {
+            method: 'POST',
+            body: JSON.stringify({
+                email,
+                code,
+                type: 'email'
+            })
         })
+        console.log(response);
     }
 
     return (
         <div className={styles.content}>
-            {error && (
-              <div className="error">
-                <p>{error}</p>
-              </div>
-            )}
             {!showCode &&
                 <form onSubmit={checkToken}>
                     <input 

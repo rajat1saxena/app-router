@@ -1,23 +1,35 @@
 "use client"
 
-import { signIn, signOut, useSession } from 'next-auth/react'
+import { useEffect, useState } from 'react'
 import styles from './NavMenu.module.css'
+import { supabase } from '@/lib/supabase'
 
 function AuthButton() {
-    const {data: session} = useSession()
+    const [session, setSession] = useState<any>()
+    useEffect(() => {
+        checkSession()
+    }, [])
+
+    const checkSession = async function () {
+        const { data: {session: sessionLocal}, error } = await supabase.auth.getSession()
+        if (sessionLocal) {
+            setSession(sessionLocal)
+        }
+        console.log(session, error);
+    }
 
     if (session) {
         return (
             <div className={styles.navbar}>
-                {session?.user?.email} <br />
-                <button onClick={() => signOut()}>Sign out</button>
+                {(session?.user as any)?.email} <br />
+                <button onClick={() => {}}>Sign out</button>
             </div>
         )
     }
     return (
         <div className={styles.navbar}>
             Guest <br />
-            <button onClick={() => signIn()}>Sign in</button>
+            <button onClick={() => {}}>Sign in</button>
         </div>
     )
 }
